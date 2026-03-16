@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Data files (user uploaded)
+uploaded_data/
+*.edf
+*.bdf
+*.fif
+*.set
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.pytest_cache/
