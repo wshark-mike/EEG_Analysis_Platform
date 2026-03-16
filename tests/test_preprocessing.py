@@ -41,6 +41,21 @@ class TestBandpassFilter:
         filtered = apply_bandpass_filter(raw, l_freq=1.0, h_freq=30.0)
         assert filtered.get_data().shape == raw.get_data().shape
 
+    def test_invalid_freq_order_raises(self):
+        raw = _create_sample_raw()
+        with pytest.raises(ValueError, match="l_freq.*must be less than h_freq"):
+            apply_bandpass_filter(raw, l_freq=30.0, h_freq=1.0)
+
+    def test_h_freq_exceeds_nyquist_raises(self):
+        raw = _create_sample_raw(sfreq=100.0)
+        with pytest.raises(ValueError, match="must not exceed Nyquist"):
+            apply_bandpass_filter(raw, l_freq=1.0, h_freq=60.0)
+
+    def test_negative_l_freq_raises(self):
+        raw = _create_sample_raw()
+        with pytest.raises(ValueError, match="l_freq must be non-negative"):
+            apply_bandpass_filter(raw, l_freq=-1.0, h_freq=30.0)
+
 
 class TestNotchFilter:
     def test_returns_raw(self):

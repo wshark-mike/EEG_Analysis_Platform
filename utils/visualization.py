@@ -20,17 +20,27 @@ def plot_raw_signals(raw, duration=10.0, n_channels=None, start=0.0):
     raw : mne.io.Raw
         The raw EEG data.
     duration : float
-        Duration of data to plot in seconds.
+        Duration of data to plot in seconds. Must be positive.
     n_channels : int or None
         Number of channels to plot. If None, plots all.
     start : float
-        Start time in seconds.
+        Start time in seconds. Must be non-negative.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
         The generated figure.
+
+    Raises
+    ------
+    ValueError
+        If duration is not positive or start is negative.
     """
+    if duration <= 0:
+        raise ValueError("duration must be positive")
+    if start < 0:
+        raise ValueError("start must be non-negative")
+
     sfreq = raw.info["sfreq"]
     start_sample = int(start * sfreq)
     end_sample = int((start + duration) * sfreq)
@@ -70,17 +80,27 @@ def plot_raw_signals_plotly(raw, duration=10.0, n_channels=None, start=0.0):
     raw : mne.io.Raw
         The raw EEG data.
     duration : float
-        Duration of data to plot in seconds.
+        Duration of data to plot in seconds. Must be positive.
     n_channels : int or None
         Number of channels to plot. If None, plots all.
     start : float
-        Start time in seconds.
+        Start time in seconds. Must be non-negative.
 
     Returns
     -------
     fig : plotly.graph_objects.Figure
         The generated interactive figure.
+
+    Raises
+    ------
+    ValueError
+        If duration is not positive or start is negative.
     """
+    if duration <= 0:
+        raise ValueError("duration must be positive")
+    if start < 0:
+        raise ValueError("start must be non-negative")
+
     sfreq = raw.info["sfreq"]
     start_sample = int(start * sfreq)
     end_sample = int((start + duration) * sfreq)
@@ -141,7 +161,16 @@ def plot_psd(psd_data, freqs, ch_names, log_scale=True):
     -------
     fig : plotly.graph_objects.Figure
         The generated figure.
+
+    Raises
+    ------
+    ValueError
+        If psd_data and ch_names have mismatched dimensions.
     """
+    if len(psd_data) != len(ch_names):
+        raise ValueError(
+            f"psd_data has {len(psd_data)} channels but ch_names has {len(ch_names)}"
+        )
     fig = go.Figure()
 
     for i, ch_name in enumerate(ch_names):

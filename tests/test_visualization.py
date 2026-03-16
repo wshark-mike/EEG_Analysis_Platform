@@ -60,6 +60,16 @@ class TestPlotRawSignals:
         assert isinstance(fig, plt.Figure)
         plt.close(fig)
 
+    def test_negative_duration_raises(self):
+        raw = _create_sample_raw()
+        with pytest.raises(ValueError, match="duration must be positive"):
+            plot_raw_signals(raw, duration=-1.0)
+
+    def test_negative_start_raises(self):
+        raw = _create_sample_raw()
+        with pytest.raises(ValueError, match="start must be non-negative"):
+            plot_raw_signals(raw, start=-1.0)
+
     def test_duration_exceeds_data_length(self):
         raw = _create_sample_raw(duration=1.0)
         fig = plot_raw_signals(raw, duration=10.0)
@@ -94,6 +104,16 @@ class TestPlotRawSignalsPlotly:
         fig = plot_raw_signals_plotly(raw, duration=1.0, start=2.0)
         assert isinstance(fig, go.Figure)
 
+    def test_negative_duration_raises(self):
+        raw = _create_sample_raw()
+        with pytest.raises(ValueError, match="duration must be positive"):
+            plot_raw_signals_plotly(raw, duration=-1.0)
+
+    def test_negative_start_raises(self):
+        raw = _create_sample_raw()
+        with pytest.raises(ValueError, match="start must be non-negative"):
+            plot_raw_signals_plotly(raw, start=-1.0)
+
 
 class TestPlotPSD:
     def test_returns_plotly_figure(self):
@@ -102,6 +122,13 @@ class TestPlotPSD:
         ch_names = ["EEG1", "EEG2", "EEG3", "EEG4"]
         fig = plot_psd(psd_data, freqs, ch_names)
         assert isinstance(fig, go.Figure)
+
+    def test_mismatched_channels_raises(self):
+        freqs = np.linspace(1, 50, 50)
+        psd_data = np.random.rand(3, 50)
+        ch_names = ["Ch1", "Ch2"]
+        with pytest.raises(ValueError, match="psd_data has 3 channels"):
+            plot_psd(psd_data, freqs, ch_names)
 
     def test_trace_count_matches_channels(self):
         freqs = np.linspace(1, 50, 100)
