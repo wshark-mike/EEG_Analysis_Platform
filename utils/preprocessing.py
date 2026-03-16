@@ -31,13 +31,13 @@ def apply_bandpass_filter(raw, l_freq=0.1, h_freq=40.0):
         If l_freq >= h_freq or frequencies are out of valid range.
     """
     nyquist = raw.info["sfreq"] / 2.0
-    if l_freq < 0:
+    if l_freq is not None and l_freq < 0:
         raise ValueError("l_freq must be non-negative")
-    if h_freq <= 0:
+    if h_freq is not None and h_freq <= 0:
         raise ValueError("h_freq must be positive")
-    if l_freq >= h_freq:
+    if l_freq is not None and h_freq is not None and l_freq >= h_freq:
         raise ValueError(f"l_freq ({l_freq}) must be less than h_freq ({h_freq})")
-    if h_freq > nyquist:
+    if h_freq is not None and h_freq > nyquist:
         raise ValueError(
             f"h_freq ({h_freq}) must not exceed Nyquist frequency ({nyquist} Hz)"
         )
