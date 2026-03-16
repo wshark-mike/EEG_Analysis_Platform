@@ -167,13 +167,13 @@ def _create_brainvision_files(tmp_dir, n_channels=3, sfreq=256.0, n_samples=512)
         "Brain Vision Data Exchange Marker File Version 1.0\n"
         "\n"
         "[Common Infos]\n"
-        f"Codepage=UTF-8\n"
+        "Codepage=UTF-8\n"
         f"DataFile={basename}.eeg\n"
         "\n"
         "[Marker Infos]\n"
         "; Each entry: Mk<Marker number>=<Type>,<Description>,"
         "<Position in data points>,<Size in data points>,<Channel number>\n"
-        f"Mk1=New Segment,,1,1,0,00000000000000000000\n"
+        "Mk1=New Segment,,1,1,0,00000000000000000000\n"
     )
     with open(vmrk_path, "w") as f:
         f.write(vmrk_content)
@@ -186,7 +186,7 @@ def _create_brainvision_files(tmp_dir, n_channels=3, sfreq=256.0, n_samples=512)
         "Brain Vision Data Exchange Header File Version 1.0\n"
         "\n"
         "[Common Infos]\n"
-        f"Codepage=UTF-8\n"
+        "Codepage=UTF-8\n"
         f"DataFile={basename}.eeg\n"
         f"MarkerFile={basename}.vmrk\n"
         "DataFormat=BINARY\n"

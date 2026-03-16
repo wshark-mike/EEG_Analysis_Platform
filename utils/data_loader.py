@@ -5,6 +5,7 @@ EDF, BDF, FIF, SET, CSV, and BrainVision files using the MNE library.
 """
 
 import os
+import re
 import tempfile
 
 import mne
@@ -48,7 +49,6 @@ def load_eeg_file(file_path, file_type=None):
         If the file format is not supported.
     """
     if file_type is None:
-        import os
         file_type = os.path.splitext(file_path)[1].lower()
 
     if file_type == ".edf":
@@ -208,7 +208,6 @@ def _rewrite_brainvision_header(vhdr_text, eeg_filename, vmrk_filename):
     str
         Updated .vhdr content.
     """
-    import re
     vhdr_text = re.sub(
         r"(?m)^DataFile=.*$", f"DataFile={eeg_filename}", vhdr_text
     )
