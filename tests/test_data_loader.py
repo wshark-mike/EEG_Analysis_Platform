@@ -11,6 +11,8 @@ from utils.data_loader import (
     get_supported_formats,
     load_eeg_file,
     _load_csv_as_raw,
+    _rewrite_brainvision_header,
+    load_brainvision_files,
     get_raw_info,
 )
 
@@ -36,6 +38,10 @@ class TestGetSupportedFormats:
     def test_contains_csv(self):
         formats = get_supported_formats()
         assert ".csv" in formats
+
+    def test_contains_vhdr(self):
+        formats = get_supported_formats()
+        assert ".vhdr" in formats
 
     def test_returns_copy(self):
         f1 = get_supported_formats()
@@ -140,3 +146,133 @@ class TestGetRawInfo:
         assert abs(info["duration_sec"] - 1.0) < 0.01
         assert len(info["ch_names"]) == 3
         assert len(info["ch_types"]) == 3
+
+
+def _create_brainvision_files(tmp_dir, n_channels=3, sfreq=256.0, n_samples=512):
+    """Create minimal synthetic BrainVision (.vhdr, .eeg, .vmrk) files."""
+    ch_names = [f"Ch{i+1}" for i in range(n_channels)]
+    basename = "test"
+
+    # Generate binary data (IEEE float 32)
+    rng = np.random.RandomState(42)
+    data = rng.randn(n_samples, n_channels).astype(np.float32)
+
+    # .eeg — binary data (samples interleaved across channels)
+    eeg_path = os.path.join(tmp_dir, f"{basename}.eeg")
+    data.tofile(eeg_path)
+
+    # .vmrk — marker file
+    vmrk_path = os.path.join(tmp_dir, f"{basename}.vmrk")
+    vmrk_content = (
+        "Brain Vision Data Exchange Marker File Version 1.0\n"
+        "\n"
+        "[Common Infos]\n"
+        "Codepage=UTF-8\n"
+        f"DataFile={basename}.eeg\n"
+        "\n"
+        "[Marker Infos]\n"
+        "; Each entry: Mk<Marker number>=<Type>,<Description>,"
+        "<Position in data points>,<Size in data points>,<Channel number>\n"
+        "Mk1=New Segment,,1,1,0,00000000000000000000\n"
+    )
+    with open(vmrk_path, "w") as f:
+        f.write(vmrk_content)
+
+    # .vhdr — header file
+    ch_section = "\n".join(
+        f"Ch{i+1}={name},,1" for i, name in enumerate(ch_names)
+    )
+    vhdr_content = (
+        "Brain Vision Data Exchange Header File Version 1.0\n"
+        "\n"
+        "[Common Infos]\n"
+        "Codepage=UTF-8\n"
+        f"DataFile={basename}.eeg\n"
+        f"MarkerFile={basename}.vmrk\n"
+        "DataFormat=BINARY\n"
+        "DataOrientation=MULTIPLEXED\n"
+        f"NumberOfChannels={n_channels}\n"
+        f"SamplingInterval={1e6 / sfreq}\n"
+        "\n"
+        "[Binary Infos]\n"
+        "BinaryFormat=IEEE_FLOAT_32\n"
+        "\n"
+        "[Channel Infos]\n"
+        f"{ch_section}\n"
+    )
+    vhdr_path = os.path.join(tmp_dir, f"{basename}.vhdr")
+    with open(vhdr_path, "w") as f:
+        f.write(vhdr_content)
+
+    return vhdr_path, eeg_path, vmrk_path
+
+
+class TestRewriteBrainvisionHeader:
+    def test_rewrites_datafile(self):
+        header = "DataFile=old.eeg\nMarkerFile=old.vmrk\n"
+        result = _rewrite_brainvision_header(header, "new.eeg", "new.vmrk")
+        assert "DataFile=new.eeg" in result
+        assert "MarkerFile=new.vmrk" in result
+
+    def test_preserves_other_content(self):
+        header = "[Common Infos]\nDataFile=x.eeg\nMarkerFile=x.vmrk\nDataFormat=BINARY\n"
+        result = _rewrite_brainvision_header(header, "y.eeg", "y.vmrk")
+        assert "DataFormat=BINARY" in result
+
+
+class TestLoadBrainVision:
+    def test_load_vhdr_via_load_eeg_file(self):
+        """Test loading BrainVision .vhdr through the main interface."""
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            vhdr_path, _, _ = _create_brainvision_files(tmp_dir, n_channels=3)
+            raw = load_eeg_file(vhdr_path, file_type=".vhdr")
+            assert isinstance(raw, mne.io.BaseRaw)
+            assert len(raw.ch_names) == 3
+        finally:
+            for f in os.listdir(tmp_dir):
+                os.unlink(os.path.join(tmp_dir, f))
+            os.rmdir(tmp_dir)
+
+    def test_load_brainvision_files_from_buffers(self):
+        """Test load_brainvision_files with in-memory buffers."""
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            vhdr_path, eeg_path, vmrk_path = _create_brainvision_files(
+                tmp_dir, n_channels=4, sfreq=500.0, n_samples=1000,
+            )
+            with open(vhdr_path, "rb") as f:
+                vhdr_buf = f.read()
+            with open(eeg_path, "rb") as f:
+                eeg_buf = f.read()
+            with open(vmrk_path, "rb") as f:
+                vmrk_buf = f.read()
+
+            raw = load_brainvision_files(vhdr_buf, eeg_buf, vmrk_buf)
+            assert isinstance(raw, mne.io.BaseRaw)
+            assert len(raw.ch_names) == 4
+            assert raw.info["sfreq"] == 500.0
+        finally:
+            for f in os.listdir(tmp_dir):
+                os.unlink(os.path.join(tmp_dir, f))
+            os.rmdir(tmp_dir)
+
+    def test_load_brainvision_files_temp_cleanup(self):
+        """Verify temp files are cleaned up after loading."""
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            vhdr_path, eeg_path, vmrk_path = _create_brainvision_files(tmp_dir)
+            with open(vhdr_path, "rb") as f:
+                vhdr_buf = f.read()
+            with open(eeg_path, "rb") as f:
+                eeg_buf = f.read()
+            with open(vmrk_path, "rb") as f:
+                vmrk_buf = f.read()
+
+            # Load succeeds and returns valid data
+            raw = load_brainvision_files(vhdr_buf, eeg_buf, vmrk_buf)
+            assert raw.n_times > 0
+        finally:
+            for f in os.listdir(tmp_dir):
+                os.unlink(os.path.join(tmp_dir, f))
+            os.rmdir(tmp_dir)

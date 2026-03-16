@@ -8,7 +8,7 @@ Upload, visualize, preprocess, and analyze EEG data through an intuitive browser
 
 ## Features
 
-- **📂 Data Upload** — Load EEG data from EDF, BDF, FIF, SET, and CSV files
+- **📂 Data Upload** — Load EEG data from EDF, BDF, FIF, SET, CSV, and BrainVision (.vhdr/.eeg/.vmrk) files
 - **📈 Visualization** — Interactive signal plots (Plotly) and static plots (Matplotlib)
 - **🔧 Preprocessing** — Bandpass/notch filtering, re-referencing, ICA artifact removal, bad channel detection
 - **📊 Analysis** — Power spectral density (PSD), frequency band power, channel connectivity
@@ -54,7 +54,7 @@ EEG_Analysis_Platform/
 │   └── 4_📊_Analysis.py          # Analysis and export page
 ├── utils/
 │   ├── __init__.py
-│   ├── data_loader.py             # EEG file loading (EDF, BDF, FIF, CSV, SET)
+│   ├── data_loader.py             # EEG file loading (EDF, BDF, FIF, CSV, SET, BrainVision)
 │   ├── preprocessing.py           # Filtering, re-referencing, ICA
 │   ├── analysis.py                # PSD, band power, connectivity, ERP, TFR
 │   └── visualization.py           # Plotting helpers (Matplotlib + Plotly)
@@ -78,6 +78,7 @@ Navigate to the **Data Upload** page and upload an EEG file. Supported formats:
 | FIF    | `.fif`    | MNE-Python native format |
 | SET    | `.set`    | EEGLAB format |
 | CSV    | `.csv`    | Comma-separated values (columns = channels, rows = samples) |
+| BrainVision | `.vhdr` + `.eeg` + `.vmrk` | BrainVision format (upload all three files together) |
 
 ### 2. Visualize Signals
 
