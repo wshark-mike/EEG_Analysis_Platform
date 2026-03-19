@@ -6,11 +6,10 @@ EDF, BDF, FIF, SET, CSV, and BrainVision files using the MNE library.
 
 import os
 import re
-import tempfile
-
 import mne
 import numpy as np
 import pandas as pd
+import streamlit as st
 
 
 SUPPORTED_FORMATS = {
@@ -28,6 +27,7 @@ def get_supported_formats():
     return SUPPORTED_FORMATS.copy()
 
 
+@st.cache_resource(show_spinner=False)
 def load_eeg_file(file_path, file_type=None):
     """Load an EEG data file and return an MNE Raw object.
 
@@ -68,6 +68,10 @@ def load_eeg_file(file_path, file_type=None):
             f"Unsupported file format: '{file_type}'. "
             f"Supported formats: {list(SUPPORTED_FORMATS.keys())}"
         )
+    
+    if not raw.preload:
+        raw.load_data()
+
     return raw
 
 
@@ -130,68 +134,6 @@ def get_raw_info(raw):
         "ch_types": [mne.channel_type(raw.info, i) for i in range(len(raw.ch_names))],
     }
 
-
-def load_brainvision_files(vhdr_buffer, eeg_buffer, vmrk_buffer, basename="data"):
-    """Load BrainVision data from in-memory file buffers.
-
-    BrainVision format consists of three files (.vhdr, .eeg, .vmrk) that must
-    reside in the same directory. This function writes the buffers to a
-    temporary directory and loads them with MNE.
-
-    Parameters
-    ----------
-    vhdr_buffer : bytes or buffer
-        Content of the .vhdr header file.
-    eeg_buffer : bytes or buffer
-        Content of the .eeg data file.
-    vmrk_buffer : bytes or buffer
-        Content of the .vmrk marker file.
-    basename : str
-        Base filename used for the temporary files (without extension).
-
-    Returns
-    -------
-    raw : mne.io.Raw
-        The loaded raw EEG data.
-    """
-    tmp_dir = tempfile.mkdtemp()
-    try:
-        vhdr_path = os.path.join(tmp_dir, f"{basename}.vhdr")
-        eeg_path = os.path.join(tmp_dir, f"{basename}.eeg")
-        vmrk_path = os.path.join(tmp_dir, f"{basename}.vmrk")
-
-        # Read header content and rewrite DataFile / MarkerFile references
-        # so they point to the co-located temp files.
-        vhdr_content = (
-            bytes(vhdr_buffer) if not isinstance(vhdr_buffer, bytes)
-            else vhdr_buffer
-        )
-        vhdr_text = vhdr_content.decode("utf-8", errors="replace")
-        vhdr_text = _rewrite_brainvision_header(
-            vhdr_text, f"{basename}.eeg", f"{basename}.vmrk"
-        )
-
-        with open(vhdr_path, "w", encoding="utf-8") as f:
-            f.write(vhdr_text)
-        with open(eeg_path, "wb") as f:
-            f.write(bytes(eeg_buffer) if not isinstance(eeg_buffer, bytes)
-                    else eeg_buffer)
-        with open(vmrk_path, "wb") as f:
-            f.write(bytes(vmrk_buffer) if not isinstance(vmrk_buffer, bytes)
-                    else vmrk_buffer)
-
-        raw = mne.io.read_raw_brainvision(vhdr_path, preload=True)
-    finally:
-        # Clean up temp files
-        for path in (vhdr_path, eeg_path, vmrk_path):
-            if os.path.exists(path):
-                os.unlink(path)
-        os.rmdir(tmp_dir)
-
-    return raw
-
-
-def _rewrite_brainvision_header(vhdr_text, eeg_filename, vmrk_filename):
     """Rewrite DataFile and MarkerFile references in a .vhdr header string.
 
     Parameters

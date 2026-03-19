@@ -3,14 +3,12 @@ Data Upload Page — Load EEG data files into the platform.
 """
 
 import os
-import tempfile
+import shutil
 import streamlit as st
-from utils.data_loader import (
-    load_eeg_file,
-    load_brainvision_files,
-    get_raw_info,
-    get_supported_formats,
-)
+from utils.data_loader import load_eeg_file, get_raw_info, get_supported_formats
+
+DATA_DIR = "data"
+os.makedirs(DATA_DIR, exist_ok=True)
 
 st.set_page_config(page_title="Data Upload", page_icon="📂", layout="wide")
 
@@ -29,6 +27,9 @@ def _display_raw_info(raw, filename):
     st.session_state.raw = raw
     st.session_state.raw_original = raw.copy()
     st.session_state.filename = filename
+
+    st.session_state.pipeline = [f"📂 原始数据 ({filename})"]
+    st.session_state.raw_history = []
 
     st.success("✅ Data loaded successfully!")
 
@@ -65,22 +66,25 @@ if upload_mode == "Single file (EDF / BDF / FIF / SET / CSV)":
     if uploaded_file is not None:
         st.info(f"📄 File: **{uploaded_file.name}** ({uploaded_file.size / 1024:.1f} KB)")
 
+        basename = os.path.splitext(uploaded_file.name)[0]
         suffix = os.path.splitext(uploaded_file.name)[1].lower()
+        
+        sub_dir = os.path.join(DATA_DIR, basename)
+        os.makedirs(sub_dir, exist_ok=True)
 
         with st.spinner("Loading EEG data..."):
             try:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                    tmp.write(uploaded_file.getbuffer())
-                    tmp_path = tmp.name
+                save_path = os.path.join(sub_dir, uploaded_file.name)
+                with open(save_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
 
-                raw = load_eeg_file(tmp_path, file_type=suffix)
+                raw = load_eeg_file(save_path, file_type=suffix)
                 _display_raw_info(raw, uploaded_file.name)
+
+                st.toast(f"Saved to data/{basename}/", icon="💾")
 
             except Exception as e:
                 st.error(f"❌ Failed to load file: {e}")
-            finally:
-                if "tmp_path" in dir() and os.path.exists(tmp_path):
-                    os.unlink(tmp_path)
 
 else:
     # --- BrainVision multi-file uploader ---
@@ -113,46 +117,108 @@ else:
                 "Please upload all three BrainVision files (.vhdr, .eeg, .vmrk)."
             )
         else:
-            with st.spinner("Loading BrainVision data..."):
+
+            basename = os.path.splitext(file_map[".vhdr"].name)[0]
+            sub_dir = os.path.join(DATA_DIR, basename)
+            os.makedirs(sub_dir, exist_ok=True)
+            
+            with st.spinner("Saving and loading BrainVision data..."):
                 try:
-                    raw = load_brainvision_files(
-                        vhdr_buffer=file_map[".vhdr"].getbuffer(),
-                        eeg_buffer=file_map[".eeg"].getbuffer(),
-                        vmrk_buffer=file_map[".vmrk"].getbuffer(),
-                    )
+                    vhdr_path = ""
+                    for ext, file_obj in file_map.items():
+                        save_path = os.path.join(sub_dir, file_obj.name)
+                        with open(save_path, "wb") as out_f:
+                            out_f.write(file_obj.getbuffer())
+
+                        if ext == ".vhdr":
+                            vhdr_path = save_path
+
+                    raw = load_eeg_file(vhdr_path, file_type=".vhdr")
                     _display_raw_info(raw, file_map[".vhdr"].name)
+                    
+                    st.toast(f"BrainVision files saved to data/{basename}/", icon="💾")
 
                 except Exception as e:
                     st.error(f"❌ Failed to load BrainVision files: {e}")
 
-# Option to use sample data
+# ==========================================
+# --- 🕰️ Load & Manage History ---
+# ==========================================
 st.markdown("---")
-st.markdown("### Or use sample data")
-if st.button("Load MNE sample data (auditory/visual)"):
-    with st.spinner("Downloading and loading sample data... This may take a moment."):
-        try:
-            import mne
-            sample_data_path = mne.datasets.sample.data_path()
-            raw_fname = os.path.join(
-                sample_data_path, "MEG", "sample", "sample_audvis_raw.fif"
+st.markdown("### 🕰️ Load & Manage History")
+
+if os.path.exists(DATA_DIR):
+    sub_dirs = [d for d in os.listdir(DATA_DIR) if os.path.isdir(os.path.join(DATA_DIR, d))]
+    
+    if sub_dirs:
+        col_hist1, col_hist2, col_hist3 = st.columns([3, 1, 1])
+        
+        with col_hist1:
+            selected_dir = st.selectbox(
+                "Select a previously saved dataset:",
+                options=sub_dirs,
+                index=0
             )
-            raw = load_eeg_file(raw_fname, file_type=".fif")
+            
+        with col_hist2:
+            st.write("") 
+            st.write("")
+            # 只在这里捕获按钮的点击状态，不写执行逻辑
+            load_clicked = st.button("📥 加载 (Load)", use_container_width=True)
+                        
+        with col_hist3:
+            st.write("") 
+            st.write("")
+            # 同样只捕获状态
+            delete_clicked = st.button("🗑️ 删除 (Delete)", use_container_width=True)
+            
+        # ==========================================
+        # 💡 [关键修改]：把执行逻辑移到分栏外面，占据全宽
+        # ==========================================
+        if load_clicked:
+            dir_path = os.path.join(DATA_DIR, selected_dir)
+            files_in_dir = os.listdir(dir_path)
+            
+            target_file = None
+            target_suffix = None
+            
+            vhdr_files = [f for f in files_in_dir if f.lower().endswith('.vhdr')]
+            if vhdr_files:
+                target_file = vhdr_files[0]
+                target_suffix = ".vhdr"
+            else:
+                valid_exts = [".edf", ".bdf", ".fif", ".set", ".csv"]
+                for f in files_in_dir:
+                    ext = os.path.splitext(f)[1].lower()
+                    if ext in valid_exts:
+                        target_file = f
+                        target_suffix = ext
+                        break
+            
+            if target_file:
+                file_path = os.path.join(dir_path, target_file)
+                with st.spinner(f"Loading dataset {selected_dir}..."):
+                    try:
+                        raw = load_eeg_file(file_path, file_type=target_suffix)
+                        # 现在这个函数会在页面的主区域（全宽）渲染，不会再被挤压了！
+                        _display_raw_info(raw, target_file)
+                        st.toast(f"Loaded dataset: {selected_dir}", icon="✅")
+                    except Exception as e:
+                        st.error(f"❌ Failed to load history dataset: {e}")
+            else:
+                st.error(f"❌ No valid EEG files found in folder '{selected_dir}'.")
 
-            # Pick only EEG channels for simplicity
-            raw.pick_types(eeg=True)
+        if delete_clicked:
+            dir_path = os.path.join(DATA_DIR, selected_dir)
+            try:
+                import shutil
+                shutil.rmtree(dir_path)
+                st.success(f"✅ 成功删除数据集 {selected_dir} 及其所有文件。")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Deletion failed: {e}")
 
-            st.session_state.raw = raw
-            st.session_state.raw_original = raw.copy()
-            st.session_state.filename = "sample_audvis_raw.fif"
-
-            st.success("✅ Sample data loaded!")
-
-            info = get_raw_info(raw)
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Channels", info["n_channels"])
-            col2.metric("Sample Rate", f"{info['sfreq']} Hz")
-            col3.metric("Duration", f"{info['duration_sec']:.1f} s")
-            col4.metric("Samples", f"{info['n_samples']:,}")
-
-        except Exception as e:
-            st.error(f"❌ Failed to load sample data: {e}")
+    else:
+        st.info("📂 The local 'data' folder is currently empty. Upload a file above to save it.")
+else:
+    st.info("📂 The 'data' folder does not exist yet. It will be created when you upload your first file.")

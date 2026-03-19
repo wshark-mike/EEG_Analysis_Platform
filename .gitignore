@@ -27,11 +27,13 @@ Thumbs.db
 .streamlit/secrets.toml
 
 # Data files (user uploaded)
-uploaded_data/
+data/
 *.edf
 *.bdf
 *.fif
 *.set
+
+models/weights/
 
 # Test artifacts
 .pytest_cache/

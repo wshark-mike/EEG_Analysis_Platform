@@ -62,7 +62,7 @@ def plot_raw_signals(raw, duration=10.0, n_channels=None, start=0.0):
     return fig
 
 
-def plot_raw_signals_plotly(raw, duration=10.0, n_channels=None, start=0.0):
+def plot_raw_signals_plotly(raw, duration=10.0, n_channels=None, start=0.0, max_points_per_trace=2000):
     """Plot raw EEG signals using Plotly (interactive).
 
     Parameters
@@ -75,6 +75,8 @@ def plot_raw_signals_plotly(raw, duration=10.0, n_channels=None, start=0.0):
         Number of channels to plot. If None, plots all.
     start : float
         Start time in seconds.
+    max_points_per_trace : int
+        Maximum number of points to display per trace for performance reasons.
 
     Returns
     -------
@@ -89,9 +91,15 @@ def plot_raw_signals_plotly(raw, duration=10.0, n_channels=None, start=0.0):
     data = raw.get_data(start=start_sample, stop=end_sample)
     times = np.arange(start_sample, end_sample) / sfreq
 
+    n_samples = data.shape[1]
+    step = max(1, n_samples // max_points_per_trace)
+
+    data_plot = data[:, ::step]
+    times_plot = times[::step]
+
     ch_names = raw.ch_names
     if n_channels is not None:
-        data = data[:n_channels]
+        data_plot = data_plot[:n_channels]
         ch_names = ch_names[:n_channels]
 
     n_ch = len(ch_names)
@@ -105,7 +113,8 @@ def plot_raw_signals_plotly(raw, duration=10.0, n_channels=None, start=0.0):
     for i, ch_name in enumerate(ch_names):
         fig.add_trace(
             go.Scatter(
-                x=times, y=data[i] * 1e6,
+                x=times_plot,         # 使用降采样后的时间轴
+                y=data_plot[i] * 1e6, # 使用降采样后的数据
                 mode="lines",
                 name=ch_name,
                 line=dict(width=0.8),
@@ -115,9 +124,12 @@ def plot_raw_signals_plotly(raw, duration=10.0, n_channels=None, start=0.0):
         fig.update_yaxes(title_text="µV", row=i + 1, col=1)
 
     fig.update_xaxes(title_text="Time (s)", row=n_ch, col=1)
+
+    title_suffix = f" (Preview downsampled to {len(times_plot)} points)" if step > 1 else ""
+
     fig.update_layout(
         height=max(200 * n_ch, 400),
-        title_text="Raw EEG Signals",
+        title_text=f"Raw EEG Signals{title_suffix}",
         showlegend=False,
     )
     return fig
