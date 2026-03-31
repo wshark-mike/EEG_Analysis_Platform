@@ -1,59 +1,212 @@
 """
 LLM Utilities for Automated EEG Report Generation.
+Supports both OpenAI and Google Gemini APIs.
 """
+
 import pandas as pd
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
+from utils.logger import get_logger
+from config import (
+    LLM_PROVIDER, 
+    OPENAI_API_KEY, 
+    OPENAI_MODEL,
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+    MAX_API_TOKENS_PER_SESSION
+)
 
-def generate_eeg_report(band_powers, ch_names, api_key, model_name="gpt-4o-mini"):
+logger = get_logger("llm_utils")
+
+
+def get_llm_client():
     """
-    使用大模型生成脑电数据分析报告。
+    Get configured LLM client based on LLM_PROVIDER setting.
+    
+    Returns
+    -------
+    llm : ChatOpenAI or ChatGoogleGenerativeAI
+        Configured language model client
+        
+    Raises
+    ------
+    ValueError: If provider not configured or API key missing
+    """
+    if LLM_PROVIDER == "openai":
+        if not OPENAI_API_KEY:
+            raise ValueError(
+                "❌ OPENAI_API_KEY not configured!\n"
+                "Set in .env: OPENAI_API_KEY=sk-..."
+            )
+        
+        from langchain_openai import ChatOpenAI
+        logger.info(f"Using OpenAI: {OPENAI_MODEL}")
+        return ChatOpenAI(
+            model=OPENAI_MODEL,
+            openai_api_key=OPENAI_API_KEY,
+            temperature=0.3,
+            request_timeout=60,
+            max_retries=2
+        )
+    
+    elif LLM_PROVIDER == "gemini":
+        if not GEMINI_API_KEY:
+            raise ValueError(
+                "❌ GEMINI_API_KEY not configured!\n"
+                "Set in .env: GEMINI_API_KEY=..."
+            )
+        
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        logger.info(f"Using Gemini: {GEMINI_MODEL}")
+        return ChatGoogleGenerativeAI(
+            model=GEMINI_MODEL,
+            google_api_key=GEMINI_API_KEY,
+            temperature=0.3,
+            request_timeout=60,
+            max_retries=2
+        )
+    
+    else:
+        raise ValueError(
+            f"❌ Unknown LLM_PROVIDER: {LLM_PROVIDER}\n"
+            f"Must be 'openai' or 'gemini'"
+        )
+
+
+def estimate_tokens(band_powers, ch_names):
+    """
+    Rough estimation of API tokens that will be used.
+    1 token ≈ 4 characters in English
+    """
+    data_size = len(ch_names) * len(band_powers) * 10  # chars
+    prompt_size = 800  # system prompt
+    response_size = 1500  # estimated response
+    total_chars = data_size + prompt_size + response_size
+    estimated_tokens = total_chars // 4
+    return estimated_tokens
+
+
+def generate_eeg_report(band_powers, ch_names):
+    """
+    Generate EEG analysis report using configured LLM (OpenAI or Gemini).
     
     Parameters:
     -----------
     band_powers : dict
-        来自 st.session_state.band_powers 的频段能量数据
+        Band power data from st.session_state.band_powers
     ch_names : list
-        通道名称列表
-    api_key : str
-        大模型的 API Key
-    model_name : str
-        使用的模型名称
-        
+        List of channel names
+
     Returns:
     --------
-    str: Markdown 格式的分析报告
+    str: Analysis report in Markdown format
+        
+    Raises:
+    -------
+    ValueError: If API key is not configured or data is invalid
     """
-    # 1. 数据预处理：将字典转换为易于大模型阅读的文本格式
+    if not band_powers or not ch_names:
+        raise ValueError("Invalid band_powers or ch_names data")
+    
+    # Estimate token usage
+    estimated_tokens = estimate_tokens(band_powers, ch_names)
+    if estimated_tokens > MAX_API_TOKENS_PER_SESSION:
+        logger.warning(
+            f"Estimated token usage {estimated_tokens} exceeds limit "
+            f"{MAX_API_TOKENS_PER_SESSION}"
+        )
+        raise ValueError(
+            f"Estimated API usage too high: {estimated_tokens} tokens\n"
+            f"Limit: {MAX_API_TOKENS_PER_SESSION} tokens"
+        )
+    
+    logger.info(
+        f"Generating report with {len(ch_names)} channels, "
+        f"estimated {estimated_tokens} tokens (Provider: {LLM_PROVIDER})"
+    )
+    
+    # Format data for LLM
     df = pd.DataFrame(band_powers, index=ch_names)
-    # 计算每个频段的全局平均能量，找出最显著的特征
     mean_powers = df.mean().to_dict()
     
-    # 将统计数据格式化为字符串
-    data_summary = f"通道总数: {len(ch_names)}\n"
-    data_summary += "全脑各频段平均能量:\n"
+    data_summary = f"Number of channels: {len(ch_names)}\n"
+    data_summary += "Global average band power:\n"
     for band, power in mean_powers.items():
         data_summary += f"- {band}: {power:.4f}\n"
     
-    # 2. 构建 LangChain 提示词模板
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", """你是一位资深的认知神经科学专家和脑电（EEG）分析师。
-你的任务是根据用户提供的脑电频段能量（Band Power）统计数据，撰写一份结构化、专业的初步分析报告。
-报告需要包含以下部分：
-1. 数据总览
-2. 频段特征分析（解读各频段能量的相对高低代表了什么生理或心理状态）
-3. 初步结论与建议
-请使用 Markdown 格式排版，语言通俗易懂但保持科学严谨。注意：明确标明这仅为数据特征报告，不能作为临床诊断依据。"""),
-        ("human", "这是本次提取的脑电数据特征：\n{data_summary}\n请为我生成分析报告。")
-    ])
+    # Build prompt template (same for both providers)
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """You are an expert cognitive neuroscientist and EEG analyst.
+Analyze the provided EEG band power data and generate a professional report.
 
-    # 3. 初始化模型实例
-    llm = ChatOpenAI(temperature=0.3, model=model_name, openai_api_key=api_key)
+Include:
+1. Data Overview
+2. Band-specific Analysis (interpret what each band indicates)
+3. Key Findings & Recommendations
 
-    # 4. 构建 LCEL 处理链并执行
-    chain = prompt | llm | StrOutputParser()
-    
-    # 触发调用
-    report = chain.invoke({"data_summary": data_summary})
-    return report
+Use Markdown formatting. Keep language scientifically rigorous but accessible.
+IMPORTANT: Clearly state this is a feature analysis, not clinical diagnosis.""",
+            ),
+            ("human", "Analyze this EEG data:\n{data_summary}\nGenerate the report."),
+        ]
+    )
+
+    try:
+        logger.info("🔄 正在连接 API 服务器...")
+        llm = get_llm_client()
+        
+        logger.info("🤖 正在处理数据...")
+        chain = prompt | llm | StrOutputParser()
+        
+        logger.info("📝 正在生成分析报告，这可能需要 30-60 秒...")
+        report = chain.invoke({"data_summary": data_summary})
+
+        logger.info(f"✅ 报告生成完成 ({LLM_PROVIDER})")
+        return report
+
+    except TimeoutError as e:
+        logger.error(f"API 超时 ({LLM_PROVIDER}): {str(e)}")
+        raise ValueError(
+            f"❌ API 响应超时（60秒）\n"
+            f"可能原因:\n"
+            f"1. 网络连接不稳定\n"
+            f"2. API 服务器响应缓慢\n"
+            f"3. 数据量过大\n\n"
+            f"建议: 检查网络连接，稍后重试"
+        ) from e
+    except ConnectionError as e:
+        logger.error(f"网络连接错误 ({LLM_PROVIDER}): {str(e)}")
+        raise ValueError(
+            f"❌ 网络连接失败\n"
+            f"可能原因:\n"
+            f"1. 网络断开或不稳定\n"
+            f"2. API 密钥无效\n"
+            f"3. 防火墙阻止连接\n\n"
+            f"建议: 检查网络和 API 密钥配置"
+        ) from e
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"报告生成失败 ({LLM_PROVIDER}): {error_msg}")
+        
+        if "429" in error_msg:
+            raise ValueError(
+                f"❌ API 请求过于频繁\n"
+                f"API 配额已用尽，请稍后再试"
+            ) from e
+        elif "401" in error_msg or "403" in error_msg:
+            raise ValueError(
+                f"❌ API 密钥无效或权限不足\n"
+                f"请检查 .env 文件中的 API 密钥"
+            ) from e
+        else:
+            raise ValueError(
+                f"❌ 报告生成失败: {error_msg}\n\n"
+                f"排查步骤:\n"
+                f"1. 检查 .env 文件中的 API 密钥\n"
+                f"2. 检查网络连接\n"
+                f"3. 检查 API 额度使用情况\n"
+                f"4. 查看日志: eeg_analysis.log"
+            ) from e

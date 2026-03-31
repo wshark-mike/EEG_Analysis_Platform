@@ -31,6 +31,7 @@ from config import (
     NOTCH_FREQS_EU_ASIA,
     ICA_DEFAULT_N_COMPONENTS,
     BAD_CHANNEL_ZSCORE_THRESHOLD,
+    MAX_HISTORY_DEPTH,
 )
 
 logger = get_logger("preprocessing_page")
@@ -302,9 +303,20 @@ try:
                 status_placeholder = st.empty()
 
                 try:
+                    # 🆕 Enforce history depth limit to prevent memory leaks
+                    if len(st.session_state.raw_history) >= MAX_HISTORY_DEPTH:
+                        removed = st.session_state.raw_history.pop(0)
+                        logger.info(
+                            f"History depth limit ({MAX_HISTORY_DEPTH}) reached. "
+                            f"Removed oldest entry."
+                        )
+                    
                     # Save current state to history for undo
                     st.session_state.raw_history.append(st.session_state.raw.copy())
-                    logger.debug("Saved raw data to history")
+                    logger.debug(
+                        f"Saved to history ({len(st.session_state.raw_history)}/"
+                        f"{MAX_HISTORY_DEPTH})"
+                    )
 
                     current_raw = st.session_state.raw.copy()
                     step_count = 0

@@ -61,3 +61,36 @@ CACHE_TTL_SECONDS = 3600  # Cache time-to-live (1 hour)
 # ===== Performance Thresholds =====
 MAX_MEMORY_MB = 2048  # Maximum memory usage (MB)
 PROCESSING_TIMEOUT_SECONDS = 600  # Processing timeout (10 minutes)
+
+# ===== Session & Memory Management =====
+MAX_HISTORY_DEPTH = 5  # Maximum undo history depth to prevent memory leaks
+MAX_SESSION_MEMORY_MB = 2048  # Maximum session memory in MB
+
+# ===== File Upload Configuration =====
+MAX_FILE_SIZE_MB = 500  # Maximum file upload size in MB
+ALLOWED_UPLOAD_FORMATS = ["edf", "bdf", "fif", "set", "csv", "vhdr", "eeg", "vmrk"]
+
+# ===== API & Security Configuration =====
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# LLM Provider Selection
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini").lower()  # "openai" or "gemini" (default: gemini)
+
+# OpenAI Configuration
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+# Google Gemini Configuration
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+# API Usage Limits
+MAX_API_TOKENS_PER_SESSION = 10000  # ~$0.10 max cost per session
+
+# ===== EEGNet Model Configuration =====
+EEGNET_TIME_STRIDE = 32  # Time dimension stride (from model pooling design)
+EEGNET_POOL_SIZE = 4  # Average pooling size
+EEGNET_TYPICAL_SFREQ = 256  # Typical sampling rate (Hz)

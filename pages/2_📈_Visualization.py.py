@@ -38,27 +38,40 @@ with st.form("viz_controls"):
 
     with col1:
         start_time = st.number_input(
-            "Start time (s)", min_value=0.0, max_value=max(0.0, max_duration - 1.0),
-            value=0.0, step=1.0,
+            "Start time (s)",
+            min_value=0.0,
+            max_value=max(0.0, max_duration - 1.0),
+            value=0.0,
+            step=1.0,
         )
 
     with col2:
         duration = st.number_input(
-            "Duration (s)", min_value=1.0, max_value=min(30.0, max_duration),
-            value=min(10.0, max_duration), step=1.0,
+            "Duration (s)",
+            min_value=1.0,
+            max_value=min(30.0, max_duration),
+            value=min(10.0, max_duration),
+            step=1.0,
         )
 
     with col3:
         n_channels = st.number_input(
-            "Number of channels", min_value=1, max_value=len(raw.ch_names),
-            value=min(8, len(raw.ch_names)), step=1,
+            "Number of channels",
+            min_value=1,
+            max_value=len(raw.ch_names),
+            value=min(8, len(raw.ch_names)),
+            step=1,
         )
 
     with col4:
-        plot_type = st.selectbox("Plot type", ["Interactive (Plotly)", "Static (Matplotlib)"])
+        plot_type = st.selectbox(
+            "Plot type", ["Interactive (Plotly)", "Static (Matplotlib)"]
+        )
 
     # 只有点击这个按钮，才会触发下方的绘图计算
-    submitted = st.form_submit_button("🎨 生成 / 更新波形图 (Generate Plot)", use_container_width=True)
+    submitted = st.form_submit_button(
+        "🎨 生成 / 更新波形图 (Generate Plot)", use_container_width=True
+    )
 
 
 # --- 3. 绘图计算与缓存逻辑 ---
@@ -69,14 +82,20 @@ if submitted:
     with st.spinner("Generating high-density plot... Please wait."):
         if plot_type == "Interactive (Plotly)":
             fig = plot_raw_signals_plotly(
-                raw, duration=duration, n_channels=n_channels, start=start_time,
+                raw,
+                duration=duration,
+                n_channels=n_channels,
+                start=start_time,
             )
             # 缓存生成的图表和类型
             st.session_state.viz_fig_main = fig
             st.session_state.viz_type = "plotly"
         else:
             fig = plot_raw_signals(
-                raw, duration=duration, n_channels=n_channels, start=start_time,
+                raw,
+                duration=duration,
+                n_channels=n_channels,
+                start=start_time,
             )
             # 缓存生成的图表和类型
             st.session_state.viz_fig_main = fig
@@ -84,11 +103,11 @@ if submitted:
 
 # --- 4. 前端渲染逻辑 ---
 # 无论页面怎么切换，只要缓存里有图，直接拿出来秒级渲染
-if "viz_fig_main" in st.session_state:
+if "viz_fig_main" in st.session_state and st.session_state.viz_fig_main is not None:
     if st.session_state.viz_type == "plotly":
         st.plotly_chart(st.session_state.viz_fig_main, use_container_width=True)
     else:
-        st.pyplot(st.session_state.viz_fig_main)
+        st.pyplot(st.session_state.viz_fig_main, use_container_width=True)
 else:
     st.info("👆 请调整上方的参数，并点击 **生成 / 更新波形图** 来查看脑电信号。")
 
@@ -100,11 +119,15 @@ st.markdown("### 🔍 Individual Channel View")
 # 使用列布局分离选择器和生成按钮
 col_ch1, col_ch2 = st.columns([3, 1])
 with col_ch1:
-    selected_channel = st.selectbox("Select a specific channel to inspect", raw.ch_names)
+    selected_channel = st.selectbox(
+        "Select a specific channel to inspect", raw.ch_names
+    )
 with col_ch2:
-    st.write("") # 占位对齐
+    st.write("")  # 占位对齐
     st.write("")
-    render_single_ch = st.button("👁️ 查看单通道 (View Channel)", use_container_width=True)
+    render_single_ch = st.button(
+        "👁️ 查看单通道 (View Channel)", use_container_width=True
+    )
 
 # 只有点击按钮才去切片数据并画图
 if render_single_ch and selected_channel:
@@ -121,15 +144,17 @@ if render_single_ch and selected_channel:
         # 为了防止单通道高频数据也卡顿，加入一个简单的动态降采样保护
         max_points = 5000
         step = max(1, len(times) // max_points)
-        
+
         data_plot = data[0][::step]
         times_plot = times[::step]
 
         fig_single = go.Figure()
         fig_single.add_trace(
-            go.Scatter(x=times_plot, y=data_plot * 1e6, mode="lines", name=selected_channel)
+            go.Scatter(
+                x=times_plot, y=data_plot * 1e6, mode="lines", name=selected_channel
+            )
         )
-        
+
         title_suffix = f" (Downsampled to {len(times_plot)} pts)" if step > 1 else ""
         fig_single.update_layout(
             title=f"Channel: {selected_channel}{title_suffix}",
@@ -137,10 +162,10 @@ if render_single_ch and selected_channel:
             yaxis_title="Amplitude (µV)",
             height=400,
         )
-        
+
         # 将单通道图表也存入缓存
         st.session_state.viz_fig_single = fig_single
 
 # 渲染单通道缓存图表
-if "viz_fig_single" in st.session_state:
+if "viz_fig_single" in st.session_state and st.session_state.viz_fig_single is not None:
     st.plotly_chart(st.session_state.viz_fig_single, use_container_width=True)

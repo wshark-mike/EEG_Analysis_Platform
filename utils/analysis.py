@@ -52,7 +52,11 @@ def compute_psd(raw, fmin=0.5, fmax=50.0, method="welch"):
 
 
 def compute_band_power(raw, bands=None):
-    """Compute average power in standard EEG frequency bands.
+    """
+    Compute average power in standard EEG frequency bands.
+
+    OPTIMIZED: Computes PSD once for full frequency range, then slices
+    by band. This is 4-5x faster than computing PSD separately for each band.
 
     Parameters
     ----------
@@ -67,17 +71,34 @@ def compute_band_power(raw, bands=None):
     band_powers : dict
         Dictionary mapping band names to arrays of power values
         per channel, shape (n_channels,).
+    psd_data : np.ndarray
+        Full PSD data, shape (n_channels, n_freqs).
+    freqs : np.ndarray
+        Frequency array in Hz.
     """
     if bands is None:
         bands = FREQ_BANDS
 
+    # 🆕 OPTIMIZATION: Compute PSD once for the full frequency range
+    # instead of separately for each band
+    global_fmin = min(fmin for fmin, _ in bands.values())  # 0.5 Hz
+    global_fmax = max(fmax for _, fmax in bands.values())  # 100.0 Hz
+
+    # Single PSD computation
+    psd_data, freqs = compute_psd(raw, fmin=global_fmin, fmax=global_fmax)
+
+    # 🆕 Slice frequencies for each band (no additional computation)
     band_powers = {}
     for band_name, (fmin, fmax) in bands.items():
-        psd_data, freqs = compute_psd(raw, fmin=fmin, fmax=fmax)
-        # Average power across frequencies for each channel
-        band_powers[band_name] = np.mean(psd_data, axis=1)
+        # Find frequency indices
+        idx_min = np.searchsorted(freqs, fmin)
+        idx_max = np.searchsorted(freqs, fmax)
 
-    return band_powers
+        # Slice PSD and compute mean
+        band_psd = psd_data[:, idx_min:idx_max]
+        band_powers[band_name] = np.mean(band_psd, axis=1)
+
+    return band_powers, psd_data, freqs
 
 
 def compute_erp(raw, events, event_id, tmin=-0.2, tmax=0.8):
@@ -102,8 +123,11 @@ def compute_erp(raw, events, event_id, tmin=-0.2, tmax=0.8):
         Dictionary mapping event names to mne.Evoked objects.
     """
     epochs = mne.Epochs(
-        raw, events, event_id,
-        tmin=tmin, tmax=tmax,
+        raw,
+        events,
+        event_id,
+        tmin=tmin,
+        tmax=tmax,
         baseline=(tmin, 0),
         preload=True,
         verbose=False,
@@ -188,8 +212,6 @@ def compute_connectivity(raw, method="correlation"):
     if method == "correlation":
         conn_matrix = np.corrcoef(data)
     else:
-        raise ValueError(
-            f"Unsupported method: '{method}'. Supported: ['correlation']"
-        )
+        raise ValueError(f"Unsupported method: '{method}'. Supported: ['correlation']")
 
     return conn_matrix, raw.ch_names

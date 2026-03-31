@@ -82,7 +82,11 @@ def apply_bandpass_filter(
 
     try:
         logger.info(f"Applying bandpass filter: {l_freq}-{h_freq} Hz")
-        raw_filtered = raw.copy().filter(l_freq=l_freq, h_freq=h_freq, verbose=False)
+        raw_filtered = raw.filter(
+            l_freq=l_freq,
+            h_freq=h_freq,
+            verbose=False,
+        )
         logger.debug("Bandpass filter applied successfully")
         return raw_filtered
 
@@ -147,7 +151,7 @@ def apply_notch_filter(raw, freqs: Union[float, List[float]] = NOTCH_FREQS_EU_AS
 
     try:
         logger.info(f"Applying notch filter at: {freqs} Hz")
-        raw_notched = raw.copy().notch_filter(freqs=freqs, verbose=False)
+        raw_notched = raw.notch_filter(freqs=freqs, verbose=False)
         logger.debug("Notch filter applied successfully")
         return raw_notched
 
@@ -204,9 +208,11 @@ def apply_rereferencing(raw, ref_type: str = "average"):
 
     try:
         logger.info(f"Applying re-referencing: {ref_type}")
+        # 🆕 OPTIMIZATION: Use copy() + inplace reference change
         raw_reref = raw.copy()
 
         if ref_type == "average":
+            # set_eeg_reference handles inplace internally
             raw_reref.set_eeg_reference("average", projection=False, verbose=False)
         else:
             raw_reref.set_eeg_reference([ref_type], verbose=False)
