@@ -4,11 +4,17 @@ Provides functions for filtering, re-referencing, artifact removal,
 and other common EEG preprocessing steps using MNE.
 """
 
+from typing import List, Optional, Union
+
 import mne
 import numpy as np
 
 
-def apply_bandpass_filter(raw, l_freq=0.1, h_freq=40.0):
+def apply_bandpass_filter(
+    raw: mne.io.BaseRaw,
+    l_freq: float = 0.1,
+    h_freq: float = 40.0,
+) -> mne.io.BaseRaw:
     """Apply a bandpass filter to the raw EEG data.
 
     Parameters
@@ -29,7 +35,10 @@ def apply_bandpass_filter(raw, l_freq=0.1, h_freq=40.0):
     return raw_filtered
 
 
-def apply_notch_filter(raw, freqs=50.0):
+def apply_notch_filter(
+    raw: mne.io.BaseRaw,
+    freqs: Union[float, List[float]] = 50.0,
+) -> mne.io.BaseRaw:
     """Apply a notch filter to remove power line noise.
 
     Parameters
@@ -51,7 +60,10 @@ def apply_notch_filter(raw, freqs=50.0):
     return raw_notched
 
 
-def apply_rereferencing(raw, ref_type="average"):
+def apply_rereferencing(
+    raw: mne.io.BaseRaw,
+    ref_type: str = "average",
+) -> mne.io.BaseRaw:
     """Apply re-referencing to the EEG data.
 
     Parameters
@@ -74,7 +86,11 @@ def apply_rereferencing(raw, ref_type="average"):
     return raw_reref
 
 
-def run_ica(raw, n_components=None, random_state=42):
+def run_ica(
+    raw: mne.io.BaseRaw,
+    n_components: Optional[int] = None,
+    random_state: int = 42,
+) -> mne.preprocessing.ICA:
     """Run Independent Component Analysis (ICA) on the data.
 
     Parameters
@@ -102,7 +118,11 @@ def run_ica(raw, n_components=None, random_state=42):
     return ica
 
 
-def apply_ica_exclusion(raw, ica, exclude_idx):
+def apply_ica_exclusion(
+    raw: mne.io.BaseRaw,
+    ica: mne.preprocessing.ICA,
+    exclude_idx: List[int],
+) -> mne.io.BaseRaw:
     """Apply ICA with specified components excluded.
 
     Parameters
@@ -125,7 +145,11 @@ def apply_ica_exclusion(raw, ica, exclude_idx):
     return raw_clean
 
 
-def detect_bad_channels(raw, method="zscore", threshold=3.0):
+def detect_bad_channels(
+    raw: mne.io.BaseRaw,
+    method: str = "zscore",
+    threshold: float = 3.0,
+) -> List[str]:
     """Detect bad channels using statistical methods.
 
     Parameters

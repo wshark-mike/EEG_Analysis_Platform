@@ -4,13 +4,15 @@ Provides functions for frequency analysis (PSD), ERP computation,
 time-frequency analysis, and band power extraction.
 """
 
+from typing import Dict, Final, List, Optional, Tuple
+
 import mne
 import numpy as np
 from scipy import signal
 
 
 # Standard EEG frequency bands (Hz)
-FREQ_BANDS = {
+FREQ_BANDS: Final[Dict[str, Tuple[float, float]]] = {
     "Delta": (0.5, 4.0),
     "Theta": (4.0, 8.0),
     "Alpha": (8.0, 13.0),
@@ -19,12 +21,17 @@ FREQ_BANDS = {
 }
 
 
-def get_freq_bands():
+def get_freq_bands() -> Dict[str, Tuple[float, float]]:
     """Return the standard EEG frequency band definitions."""
     return FREQ_BANDS.copy()
 
 
-def compute_psd(raw, fmin=0.5, fmax=50.0, method="welch"):
+def compute_psd(
+    raw: mne.io.BaseRaw,
+    fmin: float = 0.5,
+    fmax: float = 50.0,
+    method: str = "welch",
+) -> Tuple[np.ndarray, np.ndarray]:
     """Compute Power Spectral Density (PSD) of the EEG data.
 
     Parameters
@@ -51,7 +58,10 @@ def compute_psd(raw, fmin=0.5, fmax=50.0, method="welch"):
     return psd_data, freqs
 
 
-def compute_band_power(raw, bands=None):
+def compute_band_power(
+    raw: mne.io.BaseRaw,
+    bands: Optional[Dict[str, Tuple[float, float]]] = None,
+) -> Dict[str, np.ndarray]:
     """Compute average power in standard EEG frequency bands.
 
     Parameters
@@ -80,7 +90,13 @@ def compute_band_power(raw, bands=None):
     return band_powers
 
 
-def compute_erp(raw, events, event_id, tmin=-0.2, tmax=0.8):
+def compute_erp(
+    raw: mne.io.BaseRaw,
+    events: np.ndarray,
+    event_id: Dict[str, int],
+    tmin: float = -0.2,
+    tmax: float = 0.8,
+) -> Dict[str, mne.Evoked]:
     """Compute Event-Related Potentials (ERPs).
 
     Parameters
@@ -116,7 +132,12 @@ def compute_erp(raw, events, event_id, tmin=-0.2, tmax=0.8):
     return evoked_dict
 
 
-def compute_tfr(raw, freqs=None, n_cycles=None, method="morlet"):
+def compute_tfr(
+    raw: mne.io.BaseRaw,
+    freqs: Optional[np.ndarray] = None,
+    n_cycles: Optional[np.ndarray] = None,
+    method: str = "morlet",
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Compute Time-Frequency Representation using Morlet wavelets.
 
     Parameters
@@ -166,7 +187,10 @@ def compute_tfr(raw, freqs=None, n_cycles=None, method="morlet"):
     return power, times, freqs
 
 
-def compute_connectivity(raw, method="correlation"):
+def compute_connectivity(
+    raw: mne.io.BaseRaw,
+    method: str = "correlation",
+) -> Tuple[np.ndarray, List[str]]:
     """Compute channel connectivity matrix.
 
     Parameters

@@ -4,6 +4,9 @@ Provides helper functions to create various EEG-related plots
 using Matplotlib and Plotly for use in Streamlit.
 """
 
+from typing import Dict, List, Optional
+
+import mne
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
@@ -12,7 +15,12 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 
-def plot_raw_signals(raw, duration=10.0, n_channels=None, start=0.0):
+def plot_raw_signals(
+    raw: mne.io.BaseRaw,
+    duration: float = 10.0,
+    n_channels: Optional[int] = None,
+    start: float = 0.0,
+) -> plt.Figure:
     """Plot raw EEG signals using Matplotlib.
 
     Parameters
@@ -62,7 +70,13 @@ def plot_raw_signals(raw, duration=10.0, n_channels=None, start=0.0):
     return fig
 
 
-def plot_raw_signals_plotly(raw, duration=10.0, n_channels=None, start=0.0, max_points_per_trace=2000):
+def plot_raw_signals_plotly(
+    raw: mne.io.BaseRaw,
+    duration: float = 10.0,
+    n_channels: Optional[int] = None,
+    start: float = 0.0,
+    max_points_per_trace: int = 2000,
+) -> go.Figure:
     """Plot raw EEG signals using Plotly (interactive).
 
     Parameters
@@ -135,7 +149,12 @@ def plot_raw_signals_plotly(raw, duration=10.0, n_channels=None, start=0.0, max_
     return fig
 
 
-def plot_psd(psd_data, freqs, ch_names, log_scale=True):
+def plot_psd(
+    psd_data: np.ndarray,
+    freqs: np.ndarray,
+    ch_names: List[str],
+    log_scale: bool = True,
+) -> go.Figure:
     """Plot Power Spectral Density.
 
     Parameters
@@ -176,7 +195,10 @@ def plot_psd(psd_data, freqs, ch_names, log_scale=True):
     return fig
 
 
-def plot_band_power(band_powers, ch_names):
+def plot_band_power(
+    band_powers: Dict[str, np.ndarray],
+    ch_names: List[str],
+) -> go.Figure:
     """Plot band power as a grouped bar chart.
 
     Parameters
@@ -212,7 +234,10 @@ def plot_band_power(band_powers, ch_names):
     return fig
 
 
-def plot_connectivity_matrix(conn_matrix, ch_names):
+def plot_connectivity_matrix(
+    conn_matrix: np.ndarray,
+    ch_names: List[str],
+) -> go.Figure:
     """Plot connectivity matrix as a heatmap.
 
     Parameters
@@ -246,7 +271,11 @@ def plot_connectivity_matrix(conn_matrix, ch_names):
     return fig
 
 
-def plot_ica_components(ica, raw, n_components=None):
+def plot_ica_components(
+    ica: mne.preprocessing.ICA,
+    raw: mne.io.BaseRaw,
+    n_components: Optional[int] = None,
+) -> plt.Figure:
     """Plot ICA component time courses.
 
     Parameters

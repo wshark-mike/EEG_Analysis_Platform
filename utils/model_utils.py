@@ -1,23 +1,61 @@
+"""Deep-learning inference utilities for EEG classification.
+
+This module provides a lightweight PyTorch-based EEGNet architecture and a
+helper function for running BCI (Brain-Computer Interface) inference on
+preprocessed EEG trial data.
+
+Notes
+-----
+The ``SimpleEEGNet`` class is a simplified skeleton intended for demonstration
+purposes.  For production use, replace it with the full network architecture
+used during offline training and supply the corresponding pre-trained weights.
 """
-Deep Learning Utilities for EEG Inference.
-"""
+
+from typing import Tuple
+
 import torch
 import torch.nn as nn
 import numpy as np
 
-# 这是一个高度简化的 EEGNet 骨架示例
-# 实际使用时，请替换为你自己线下训练时使用的完整网络结构
+
 class SimpleEEGNet(nn.Module):
-    def __init__(self, n_channels, n_classes):
+    """A simplified EEGNet-style convolutional neural network for EEG decoding.
+
+    Parameters
+    ----------
+    n_channels : int
+        Number of EEG input channels.
+    n_classes : int
+        Number of output classes.
+
+    Notes
+    -----
+    The final fully-connected layer uses ``nn.LazyLinear`` so its input
+    dimension is inferred on the first forward pass.  Replace with an explicit
+    ``nn.Linear`` once the temporal dimension is known.
+    """
+
+    def __init__(self, n_channels: int, n_classes: int) -> None:
         super(SimpleEEGNet, self).__init__()
         self.conv1 = nn.Conv2d(1, 16, (1, 64), padding='same')
         self.batchnorm1 = nn.BatchNorm2d(16)
         self.depthwise = nn.Conv2d(16, 32, (n_channels, 1), groups=16)
         self.flatten = nn.Flatten()
-        # 这里的 Linear 维度需要根据实际的时间步长(samples)计算，这里暂用占位符
-        self.fc = nn.LazyLinear(n_classes) 
+        self.fc = nn.LazyLinear(n_classes)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Run a forward pass through the network.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor of shape ``(batch, 1, n_channels, n_times)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Logit scores of shape ``(batch, n_classes)``.
+        """
         x = self.conv1(x)
         x = self.batchnorm1(x)
         x = self.depthwise(x)
@@ -26,48 +64,61 @@ class SimpleEEGNet(nn.Module):
         x = self.fc(x)
         return x
 
-@torch.no_grad() # 推理阶段不需要计算梯度，节省内存
-def run_bci_inference(data_array, model_path, n_channels, n_classes=2):
-    """
-    运行模型推理
-    
-    Parameters:
-    -----------
+
+@torch.no_grad()
+def run_bci_inference(
+    data_array: np.ndarray,
+    model_path: str,
+    n_channels: int,
+    n_classes: int = 2,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Run BCI model inference on preprocessed EEG trial data.
+
+    Parameters
+    ----------
     data_array : np.ndarray
-        预处理后的脑电片段数据，形状应为 (n_trials, n_channels, n_samples)
+        Preprocessed EEG trial data with shape
+        ``(n_trials, n_channels, n_samples)``.
     model_path : str
-        预训练权重的本地路径
+        Path to the pre-trained model weights file (``.pth``).
     n_channels : int
-        通道数
-        
-    Returns:
-    --------
+        Number of EEG channels in the data.
+    n_classes : int, optional
+        Number of classification classes.  Defaults to ``2``.
+
+    Returns
+    -------
     predictions : np.ndarray
-        类别预测结果
+        Predicted class indices, shape ``(n_trials,)``.
     probabilities : np.ndarray
-        各个类别的概率
+        Softmax probabilities for each class, shape ``(n_trials, n_classes)``.
+
+    Notes
+    -----
+    If *model_path* does not exist or cannot be loaded, the function falls back
+    to a randomly-initialised model and emits a warning.  This allows the UI to
+    remain functional for demonstration purposes without a trained model.
     """
-    # 1. 初始化模型并加载权重
     model = SimpleEEGNet(n_channels=n_channels, n_classes=n_classes)
-    
+
     try:
-        # 尝试加载权重 (如果你有真实的 .pth 文件)
-        model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
-    except Exception as e:
-        # 为了演示，如果找不到权重，我们就用随机初始化的模型跑一遍
-        print(f"Warning: Could not load weights from {model_path}. Using untrained model. Error: {e}")
-    
+        model.load_state_dict(
+            torch.load(model_path, map_location=torch.device('cpu'))
+        )
+    except Exception as exc:
+        print(
+            f"Warning: Could not load weights from '{model_path}'. "
+            f"Using untrained model. Error: {exc}"
+        )
+
     model.eval()
 
-    # 2. 数据格式转换 (MNE Numpy Array -> PyTorch Tensor)
-    # EEGNet 通常需要 4D 输入: (batch_size, 1, channels, time_steps)
-    tensor_data = torch.FloatTensor(data_array).unsqueeze(1) 
-    
-    # 3. 前向传播
+    # EEGNet expects 4-D input: (batch_size, 1, channels, time_steps)
+    tensor_data = torch.FloatTensor(data_array).unsqueeze(1)
+
     outputs = model(tensor_data)
-    
-    # 4. 计算概率和预测类别
+
     probabilities = torch.softmax(outputs, dim=1).numpy()
     predictions = np.argmax(probabilities, axis=1)
-    
+
     return predictions, probabilities

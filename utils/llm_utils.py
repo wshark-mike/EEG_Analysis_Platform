@@ -1,29 +1,58 @@
+"""LLM utilities for automated EEG report generation.
+
+This module provides a LangChain-based pipeline that sends EEG frequency-band
+power statistics to a large language model (e.g., GPT-4o-mini) and receives a
+structured, Markdown-formatted clinical summary.
+
+Notes
+-----
+Requires ``langchain-core``, ``langchain-openai``, and a valid OpenAI API key.
+The generated report is for informational purposes only and must **not** be
+used as a clinical diagnostic tool.
 """
-LLM Utilities for Automated EEG Report Generation.
-"""
+
+from typing import Dict, List
+
 import pandas as pd
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 
-def generate_eeg_report(band_powers, ch_names, api_key, model_name="gpt-4o-mini"):
-    """
-    使用大模型生成脑电数据分析报告。
-    
-    Parameters:
-    -----------
+
+def generate_eeg_report(
+    band_powers: Dict[str, List[float]],
+    ch_names: List[str],
+    api_key: str,
+    model_name: str = "gpt-4o-mini",
+) -> str:
+    """Generate an EEG analysis report using a large language model.
+
+    Summarises the provided frequency-band power data into a structured,
+    Markdown-formatted report written by a virtual neuroscience expert.
+
+    Parameters
+    ----------
     band_powers : dict
-        来自 st.session_state.band_powers 的频段能量数据
-    ch_names : list
-        通道名称列表
+        Mapping from frequency-band name (e.g. ``"Alpha"``) to a list/array
+        of per-channel power values.  Typically obtained from
+        ``utils.analysis.compute_band_power``.
+    ch_names : list of str
+        Channel names corresponding to the entries in each ``band_powers``
+        value array.
     api_key : str
-        大模型的 API Key
-    model_name : str
-        使用的模型名称
-        
-    Returns:
-    --------
-    str: Markdown 格式的分析报告
+        OpenAI-compatible API key used to authenticate the LLM request.
+    model_name : str, optional
+        Name of the chat model to use.  Defaults to ``"gpt-4o-mini"``.
+
+    Returns
+    -------
+    report : str
+        Markdown-formatted analysis report produced by the language model.
+
+    Raises
+    ------
+    Exception
+        Any network or API error raised by the underlying LangChain client.
     """
     # 1. 数据预处理：将字典转换为易于大模型阅读的文本格式
     df = pd.DataFrame(band_powers, index=ch_names)

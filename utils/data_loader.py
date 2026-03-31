@@ -6,13 +6,17 @@ EDF, BDF, FIF, SET, CSV, and BrainVision files using the MNE library.
 
 import os
 import re
+import tempfile
+import shutil
+from typing import Dict, Final, List, Optional
+
 import mne
 import numpy as np
 import pandas as pd
 import streamlit as st
 
 
-SUPPORTED_FORMATS = {
+SUPPORTED_FORMATS: Final[Dict[str, str]] = {
     ".edf": "EDF (European Data Format)",
     ".bdf": "BDF (BioSemi Data Format)",
     ".fif": "FIF (MNE-Python native)",
@@ -22,13 +26,13 @@ SUPPORTED_FORMATS = {
 }
 
 
-def get_supported_formats():
+def get_supported_formats() -> Dict[str, str]:
     """Return a dictionary of supported file formats and their descriptions."""
     return SUPPORTED_FORMATS.copy()
 
 
 @st.cache_resource(show_spinner=False)
-def load_eeg_file(file_path, file_type=None):
+def load_eeg_file(file_path: str, file_type: Optional[str] = None) -> mne.io.BaseRaw:
     """Load an EEG data file and return an MNE Raw object.
 
     Parameters
@@ -40,7 +44,7 @@ def load_eeg_file(file_path, file_type=None):
 
     Returns
     -------
-    raw : mne.io.Raw
+    raw : mne.io.BaseRaw
         The loaded raw EEG data.
 
     Raises
@@ -68,14 +72,14 @@ def load_eeg_file(file_path, file_type=None):
             f"Unsupported file format: '{file_type}'. "
             f"Supported formats: {list(SUPPORTED_FORMATS.keys())}"
         )
-    
+
     if not raw.preload:
         raw.load_data()
 
     return raw
 
 
-def _load_csv_as_raw(file_path, sfreq=256.0):
+def _load_csv_as_raw(file_path: str, sfreq: float = 256.0) -> mne.io.RawArray:
     """Load a CSV file as an MNE Raw object.
 
     Expects CSV with columns as channel names and rows as time samples.
@@ -112,18 +116,19 @@ def _load_csv_as_raw(file_path, sfreq=256.0):
     return raw
 
 
-def get_raw_info(raw):
+def get_raw_info(raw: mne.io.BaseRaw) -> Dict:
     """Extract basic information from a Raw object.
 
     Parameters
     ----------
-    raw : mne.io.Raw
+    raw : mne.io.BaseRaw
         The raw EEG data.
 
     Returns
     -------
     info_dict : dict
-        Dictionary with EEG data information.
+        Dictionary with EEG data information including n_channels, ch_names,
+        sfreq, duration_sec, n_samples, and ch_types.
     """
     return {
         "n_channels": len(raw.ch_names),
@@ -134,6 +139,10 @@ def get_raw_info(raw):
         "ch_types": [mne.channel_type(raw.info, i) for i in range(len(raw.ch_names))],
     }
 
+
+def _rewrite_brainvision_header(
+    vhdr_text: str, eeg_filename: str, vmrk_filename: str
+) -> str:
     """Rewrite DataFile and MarkerFile references in a .vhdr header string.
 
     Parameters
@@ -157,3 +166,54 @@ def get_raw_info(raw):
         r"(?m)^MarkerFile=.*$", f"MarkerFile={vmrk_filename}", vhdr_text
     )
     return vhdr_text
+
+
+def load_brainvision_files(
+    vhdr_buffer: bytes, eeg_buffer: bytes, vmrk_buffer: bytes
+) -> mne.io.BaseRaw:
+    """Load BrainVision EEG data from in-memory file buffers.
+
+    Writes the buffers to a temporary directory, rewrites the header file
+    references to use the temporary filenames, loads the data with MNE,
+    and cleans up the temporary directory.
+
+    Parameters
+    ----------
+    vhdr_buffer : bytes
+        Content of the .vhdr header file.
+    eeg_buffer : bytes
+        Content of the .eeg binary data file.
+    vmrk_buffer : bytes
+        Content of the .vmrk marker file.
+
+    Returns
+    -------
+    raw : mne.io.BaseRaw
+        The loaded raw EEG data.
+    """
+    tmp_dir = tempfile.mkdtemp()
+    try:
+        basename = "eeg_data"
+        vhdr_path = os.path.join(tmp_dir, f"{basename}.vhdr")
+        eeg_path = os.path.join(tmp_dir, f"{basename}.eeg")
+        vmrk_path = os.path.join(tmp_dir, f"{basename}.vmrk")
+
+        # Write binary data and marker files as-is
+        with open(eeg_path, "wb") as f:
+            f.write(eeg_buffer)
+        with open(vmrk_path, "wb") as f:
+            f.write(vmrk_buffer)
+
+        # Rewrite header references to use the temporary filenames
+        vhdr_text = vhdr_buffer.decode("utf-8", errors="replace")
+        vhdr_text = _rewrite_brainvision_header(
+            vhdr_text, f"{basename}.eeg", f"{basename}.vmrk"
+        )
+        with open(vhdr_path, "w", encoding="utf-8") as f:
+            f.write(vhdr_text)
+
+        raw = mne.io.read_raw_brainvision(vhdr_path, preload=True, verbose=False)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    return raw

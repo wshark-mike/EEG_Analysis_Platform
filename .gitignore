@@ -40,3 +40,10 @@ models/weights/
 .coverage
 htmlcov/
 .pytest_cache/
+# Logs
+*.log
+logs/
+
+# Cache files
+*.cache
+.cache/
